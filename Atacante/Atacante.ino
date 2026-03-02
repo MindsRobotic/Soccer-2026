@@ -3,6 +3,11 @@
 #include <HTInfraredSeeker.h>
 #include <Adafruit_BNO055.h>
 #include <EEPROM.h>
+#include <LiquidCrystal.h>
+
+#define endereco_lcd 0x27
+#define colunas 16
+#define linhas 2
 
 #define endereco_bussola 0
 #define pino_calibracao 7
@@ -25,7 +30,10 @@ float kd = 0.0;
 float erroAnterior = 0;
 float proporcional, integral, derivativo = 0;
 
-int velocidadeBase = 200; 
+LiquidCrystal lcd (endereco, linhas, colunas);
+
+int velocidade_mf = 255;
+int velocidade_mt = 200;
 
 Adafruit_BNO055 bno = Adafruit_BNO055();
 
@@ -46,7 +54,10 @@ int mediaDirecao(int nova) {
 void setup() {
   Serial.begin(9600);
   Wire.begin();
-
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+  
   InfraredSeeker::Initialize();
   // Inicializa BNO055
   if(!bno.begin()){
@@ -88,6 +99,11 @@ void parar() {
       static unsigned long ultima_calibracao = 0;
       if (millis() - ultima_calibracao > 2000) {
         Serial.println("Posicione o robô apontando para o gol");
+        sensors_event_t evento;
+        bno.getEvent(&evento);
+        angulo_gol = evento.orientation.x;
+        lcd.write("Angulo atual: "angulo_gol); 
+        
         ultima_calibracao = millis();
       }
     } 
@@ -107,6 +123,7 @@ void parar() {
         Serial.print("Angulo do Gol: ");
         Serial.println(angulo_gol);
         Serial.println("============================");
+        
         
         calibracao_ja_feita = true;  // marca que já calibrou
       }
