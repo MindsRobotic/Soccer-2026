@@ -30,7 +30,7 @@ float kd = 0.0;
 float erroAnterior = 0;
 float proporcional, integral, derivativo = 0;
 
-LiquidCrystal lcd (endereco, linhas, colunas);
+LiquidCrystal lcd (endereco_lcd, linhas, colunas);
 
 int velocidade_mf = 255;
 int velocidade_mt = 200;
@@ -102,7 +102,10 @@ void parar() {
         sensors_event_t evento;
         bno.getEvent(&evento);
         angulo_gol = evento.orientation.x;
-        lcd.write("Angulo atual: "angulo_gol); 
+        Serial.println("Angulo atual: ");
+        Serial.print(angulo_gol);
+        lcd.print("Angulo atual: ");
+        lcd.print(angulo_gol);
         
         ultima_calibracao = millis();
       }
@@ -238,7 +241,13 @@ void loop() {
   // Chama o PID com o erro atual
   iniciar(erro);
 
-    Serial.print("Dir: "); Serial.print(ballDirection);
-    Serial.print(" | Int: "); Serial.print(ballIntens);
-    Serial.print(" | Erro: "); Serial.println(erro);
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("D:");
+    lcd.print(ballDirection);
+    lcd.print(" I:");
+    lcd.print(ballIntens);
+    lcd.setCursor(0, 1);
+    lcd.print("Erro:");
+    lcd.print(erro);
 }   
