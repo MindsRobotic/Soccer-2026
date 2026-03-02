@@ -87,7 +87,7 @@ void parar() {
       
       static unsigned long ultima_calibracao = 0;
       if (millis() - ultima_calibracao > 2000) {
-        Serial.println("Modo Ajuste: Posicione o robô apontando para o gol");
+        Serial.println("Posicione o robô apontando para o gol");
         ultima_calibracao = millis();
       }
     } 
