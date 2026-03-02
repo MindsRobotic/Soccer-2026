@@ -1,0 +1,227 @@
+#include <Wire.h>
+#include <AFMotor.h>
+#include <HTInfraredSeeker.h>
+#include <Adafruit_BNO055.h>
+#include <EEPROM.h>
+
+#define endereco_bussola 0
+#define pino_calibracao 7
+
+AF_DCMotor motor1(1);   // Motor dianteiro esquerdo 
+AF_DCMotor motor2(2);   // Motor dianteiro direito 
+AF_DCMotor motor3(3);   // Motor traseiro esquerdo 
+AF_DCMotor motor4(4);   // Motor traseiro direito
+
+float angulo_gol = 0;
+
+//IR 
+int ballDirection;
+int ballIntens;
+
+//PID
+float kp = 1.0;
+float ki = 0.0;
+float kd = 0.0;
+float erroAnterior = 0;
+float proporcional, integral, derivativo = 0;
+
+int velocidadeBase = 200; 
+
+Adafruit_BNO055 bno = Adafruit_BNO055();
+
+//Média móvel para suavizar a direção
+#define BUFFER_SIZE 5
+int bufferDirecao[BUFFER_SIZE] = {5,5,5,5,5};
+int bufferIndex = 0;
+
+int mediaDirecao(int nova) {
+  bufferDirecao[bufferIndex] = nova;
+  bufferIndex = (bufferIndex + 1) % BUFFER_SIZE;
+  long soma = 0;
+  for (int i = 0; i < BUFFER_SIZE; i++) soma += bufferDirecao[i];
+  int media = soma / BUFFER_SIZE;
+  return constrain(media, 0, 9);
+}
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+
+  InfraredSeeker::Initialize();
+  // Inicializa BNO055
+  if(!bno.begin()){
+    Serial.println("Erro ao iniciar BNO055!");
+    while(1);
+  }
+
+    EEPROM.write(endereco_bussola, angulo_gol); // Salva o estado no endereço 0
+    Serial.println("Angulo guardado na memória");
+    Serial.print(angulo_gol);
+
+  // Inicializa os motores parados
+  motor1.setSpeed(0); motor1.run(RELEASE);
+  motor2.setSpeed(0); motor2.run(RELEASE);
+  motor3.setSpeed(0); motor3.run(RELEASE);
+  motor4.setSpeed(0); motor4.run(RELEASE);
+
+  Serial.println("Sistema iniciado");
+}
+
+void parar() {
+  motor1.run(RELEASE);
+  motor2.run(RELEASE);
+  motor3.run(RELEASE);
+  motor4.run(RELEASE);
+}
+
+  void iniciar(int erro) {
+  static bool chave_estava_ligada = false;
+    static bool calibracao_ja_feita = false;  // evita múltiplos saves
+    
+    bool chave_ligada = (digitalRead(pino_calibracao) == HIGH);
+    
+    if (chave_ligada) {
+      //modo calibração
+      parar();
+      calibracao_ja_feita = false;  // reset para quando desligar
+      
+      static unsigned long ultima_calibracao = 0;
+      if (millis() - ultima_calibracao > 2000) {
+        Serial.println("Modo Ajuste: Posicione o robô apontando para o gol");
+        ultima_calibracao = millis();
+      }
+    } 
+    else {
+      // ===== MODO NORMAL (chave desligada) =====
+      
+      // Se a chave ACABOU de ser desligada E ainda não calibrou agora
+      if (chave_estava_ligada && !calibracao_ja_feita) {
+        
+        // Lê orientação atual e salva
+        sensors_event_t evento;
+        bno.getEvent(&evento);
+        angulo_gol = evento.orientation.x;
+        EEPROM.put(endereco_bussola, angulo_gol);
+        
+        Serial.println("============================");
+        Serial.print("Angulo do Gol: ");
+        Serial.println(angulo_gol);
+        Serial.println("============================");
+        
+        calibracao_ja_feita = true;  // marca que já calibrou
+      }
+      
+      // Executa o PID normalmente
+      calcularPID(erro);
+    }
+    
+    chave_estava_ligada  = chave_ligada;
+  }
+void calcularPID(int erro) {
+ //PID
+  proporcional = kp * erro;
+  integral += ki * erro;
+  derivativo = kd * (erro - erroAnterior);
+  erroAnterior = erro;
+
+  float correcao = proporcional + integral + derivativo;  // valor de giro (G)
+  correcao = constrain(correcao, -255, 255);
+
+  // --- Lógica de movimento baseada no erro
+  int vel1, vel2, vel3, vel4;
+
+  if (erro == 0) {
+    // Bola centralizada: anda reto
+    vel1 =  velocidadeBase;
+    vel2 =  velocidadeBase;
+    vel3 =  velocidadeBase;
+    vel4 =  velocidadeBase;
+  }
+  else if (erro < 0) {
+    // Bola à direita: gira no sentido horário
+    // Motores do lado esquerdo (1 e 3) para frente, direito (2 e 4) para trás
+    vel1 =  velocidadeBase + abs(correcao);   // frente
+    vel2 = -velocidadeBase - abs(correcao);   // ré
+    vel3 =  velocidadeBase + abs(correcao);   // frente
+    vel4 = -velocidadeBase - abs(correcao);   // ré
+  }
+  else { //erro > 0
+    // Bola à esquerda: gira no sentido anti-horário
+    // Lógica inversa
+    vel1 = -velocidadeBase - abs(correcao);   // ré
+    vel2 =  velocidadeBase + abs(correcao);   // frente
+    vel3 = -velocidadeBase - abs(correcao);   // ré
+    vel4 =  velocidadeBase + abs(correcao);   // frente
+  }
+
+  // Garante que as velocidades fiquem -255 a 255
+  vel1 = constrain(vel1, -255, 255);
+  vel2 = constrain(vel2, -255, 255);
+  vel3 = constrain(vel3, -255, 255);
+  vel4 = constrain(vel4, -255, 255);
+
+  // Aplica as velocidades nos motores (função com ifs, igual ao antigo)
+  deslocar(vel1, vel2, vel3, vel4);
+}
+
+//Função que controla cada motor individualmente
+void deslocar(int vel1, int vel2, int vel3, int vel4) {
+  // Motor 1
+  if (vel1 >= 0) {
+    motor1.run(FORWARD);
+    motor1.setSpeed(vel1);
+  } else {
+    motor1.run(BACKWARD);
+    motor1.setSpeed(abs(vel1));
+  }
+
+  // Motor 2
+  if (vel2 >= 0) {
+    motor2.run(FORWARD);
+    motor2.setSpeed(vel2);
+  } else {
+    motor2.run(BACKWARD);
+    motor2.setSpeed(abs(vel2));
+  }
+
+  // Motor 3
+  if (vel3 >= 0) {
+    motor3.run(FORWARD);
+    motor3.setSpeed(vel3);
+  } else {
+    motor3.run(BACKWARD);
+    motor3.setSpeed(abs(vel3));
+  }
+
+  // Motor 4
+  if (vel4 >= 0) {
+    motor4.run(FORWARD);
+    motor4.setSpeed(vel4);
+  } else {
+    motor4.run(BACKWARD);
+    motor4.setSpeed(abs(vel4));
+  }
+}
+
+void loop() {
+  // Leitura do IR
+  InfraredResult InfraredBall = InfraredSeeker::ReadAC();
+  ballDirection = InfraredBall.Direction;
+  ballIntens = InfraredBall.Strength;
+
+  ballDirection = mediaDirecao(ballDirection);
+
+  // Lê bússola
+  sensors_event_t event;
+  bno.getEvent(&event);
+  // Calcula o erro: centro do IR é 5
+  float erro = 5 - ballDirection; // Centro IR
+  float erroCompass = angulo_gol; // Ajusta alinhamento com o gol
+
+  // Chama o PID com o erro atual
+  iniciar(erro);
+
+    Serial.print("Dir: "); Serial.print(ballDirection);
+    Serial.print(" | Int: "); Serial.print(ballIntens);
+    Serial.print(" | Erro: "); Serial.println(erro);
+}   
