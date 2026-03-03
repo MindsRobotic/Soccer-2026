@@ -250,5 +250,5 @@ void loop() {
   
   delay(1500);
   
-  displayLED.clearDisplay();
+  tela.clearDisplay();
 }   
