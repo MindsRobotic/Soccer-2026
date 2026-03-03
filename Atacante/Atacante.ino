@@ -3,11 +3,9 @@
 #include <HTInfraredSeeker.h>
 #include <Adafruit_BNO055.h>
 #include <EEPROM.h>
-#include <LiquidCrystal.h>
+#include <Adafruit_SSD1306.h>
 
-#define endereco_lcd 0x27
-#define colunas 16
-#define linhas 2
+Adafruit_SSD1306 tela;
 
 #define endereco_bussola 0
 #define pino_calibracao 7
@@ -30,7 +28,7 @@ float kd = 0.0;
 float erroAnterior = 0;
 float proporcional, integral, derivativo = 0;
 
-LiquidCrystal lcd (endereco_lcd, linhas, colunas);
+
 
 int velocidade_mf = 255;
 int velocidade_mt = 200;
@@ -53,10 +51,9 @@ int mediaDirecao(int nova) {
 
 void setup() {
   Serial.begin(9600);
-  Wire.begin();
-  lcd.init();
-  lcd.backlight();
-  lcd.clear();
+   Wire.begin(); 
+  tela.begin(); 
+  tela.clearDisplay(); 
   
   InfraredSeeker::Initialize();
   // Inicializa BNO055
@@ -241,13 +238,13 @@ void loop() {
   // Chama o PID com o erro atual
   iniciar(erro);
 
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("D:");
-    lcd.print(ballDirection);
-    lcd.print(" I:");
-    lcd.print(ballIntens);
-    lcd.setCursor(0, 1);
-    lcd.print("Erro:");
-    lcd.print(erro);
+    tela.setTextSize(1); 
+    tela.setCursor(10, 12);
+    tela.print("D: ");
+    tela.print(ballDirection);
+    tela.print("I: ");
+    tela.print(ballIntens);
+    tela.print("Erro: ");
+    tela.print(erro);
+    tela.display();
 }   
