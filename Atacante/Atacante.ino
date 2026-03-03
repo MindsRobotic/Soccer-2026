@@ -247,4 +247,8 @@ void loop() {
     tela.print("Erro: ");
     tela.print(erro);
     tela.display();
+  
+  delay(1500);
+  
+  displayLED.clearDisplay();
 }   
