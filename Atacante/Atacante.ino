@@ -244,7 +244,7 @@ void loop() {
     tela.print(ballDirection);
     tela.print("I: ");
     tela.print(ballIntens);
-    tela.print("Erro: ");
+    tela.print("E: ");
     tela.print(erro);
     tela.display();
   
